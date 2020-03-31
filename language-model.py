@@ -16,7 +16,7 @@ if USE_CUDA:
 BATCH_SIZE = 32
 EMBEDDING_SIZE = 100
 HIDDEN_SIZE = 100
-MAX_VOCAB_SIZE = 50000
+MAX_VOCAB_SIZE = 50
 NUM_EPOCHS = 2
 
 
@@ -65,6 +65,8 @@ class RNNModel(nn.Module):
 model = RNNModel(vocab_size=len(TEXT.vocab),
                  embed_size=EMBEDDING_SIZE,
                  hidden_size=HIDDEN_SIZE)
+if USE_CUDA:
+    model = model.cuda()
 
 def repackage_hidden(h):
     if isinstance(h, torch.Tensor):
@@ -75,9 +77,30 @@ def repackage_hidden(h):
 loss_fn = nn.CrossEntropyLoss()
 learning_rate = 0.001
 optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
+scheduler = torch.optim.lr_scheduler.ExponentialLR(optimizer, 0.5) #学习率降一半
 
 VOCAB_SIZE = len(TEXT.vocab)
 GRAD_CLIP = 5.
+val_losses = []
+
+def evaluate(model, data):
+    model.eval()
+    total_loss = 0.
+    total_count = 0.
+    it = iter(train_iter)
+    print(len(train_iter))
+    with torch.no_grad():
+        hidden = model.init_hidden(BATCH_SIZE, requires_grad = False)
+        for i, batch in enumerate(it):
+            data, target = batch.text, batch.target
+            hidden = repackage_hidden(hidden)
+            output, hidden = model(data, hidden)
+            loss = loss_fn(output.view(-1, VOCAB_SIZE), target.view(-1))
+            total_loss = loss.item() * np.multiply(*data.size())
+            total_count = np.multiply(*data.size())
+    loss = total_loss / total_count
+    model.train()
+    return loss
 
 for epoch in range(NUM_EPOCHS):
     model.train()
@@ -94,6 +117,39 @@ for epoch in range(NUM_EPOCHS):
         torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
         optimizer.step()
 
-        print(i,loss.item())
-        if i % 100 == 0:
-            print("loss ",loss.item())
+        print(i, loss.item())
+        if i % 3 == 0:
+            print("loss ", loss.item())
+
+        if i % 5 == 0:
+            # torch.save(model.state_dict(), "lm.pth")
+
+            val_loss = evaluate(model, val_iter)
+            if len(val_losses) == 0 or val_loss < min(val_losses):
+                torch.save(model.state_dict(), "lm.pth")
+                print("beat model saved to lm.pth")
+            else:
+                scheduler.step()
+            val_losses.append(val_loss)
+
+#加载
+best_model = RNNModel(vocab_size=len(TEXT.vocab),
+                      embed_size=EMBEDDING_SIZE,
+                      hidden_size=HIDDEN_SIZE)
+if USE_CUDA:
+    best_model = best_model.cuda()
+best_model.load_state_dict(torch.load("lm.pth"))
+
+#使用训练好的模型生成一些句子。
+hidden = best_model.init_hidden(1)
+device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
+input = torch.randint(VOCAB_SIZE, (1, 1), dtype=torch.long).to(device)
+words = []
+for i in range(100):
+    output, hidden = best_model(input, hidden)
+    word_weights = output.squeeze().exp().cpu()
+    word_idx = torch.multinomial(word_weights, 1)[0]
+    input.fill_(word_idx)
+    word = TEXT.vocab.itos[word_idx]
+    words.append(word)
+print(" ".join(words))
