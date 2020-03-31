@@ -17,6 +17,8 @@ BATCH_SIZE = 32
 EMBEDDING_SIZE = 100
 HIDDEN_SIZE = 100
 MAX_VOCAB_SIZE = 50000
+NUM_EPOCHS = 2
+
 
 TEXT = torchtext.data.Field(lower=True)
 train, val, test = torchtext.datasets.LanguageModelingDataset.splits(path="./data",
@@ -42,7 +44,7 @@ class RNNModel(nn.Module):
                     - 一个dropout层，用来做regularization
         '''
         super(RNNModel, self).__init__()
-        self.encoder = nn.Embedding(vocab_size,embed_size)
+        self.embed = nn.Embedding(vocab_size,embed_size)
         self.lstm = nn.LSTM(embed_size, hidden_size)
         self.linear = nn.Linear(hidden_size, vocab_size)
         self.hidden_size = hidden_size
@@ -63,4 +65,35 @@ class RNNModel(nn.Module):
 model = RNNModel(vocab_size=len(TEXT.vocab),
                  embed_size=EMBEDDING_SIZE,
                  hidden_size=HIDDEN_SIZE)
-print(model)
+
+def repackage_hidden(h):
+    if isinstance(h, torch.Tensor):
+        return h.detach()
+    else:
+        return tuple(repackage_hidden(v) for v in h)
+
+loss_fn = nn.CrossEntropyLoss()
+learning_rate = 0.001
+optimizer = torch.optim.Adam(model.parameters(), lr = learning_rate)
+
+VOCAB_SIZE = len(TEXT.vocab)
+GRAD_CLIP = 5.
+
+for epoch in range(NUM_EPOCHS):
+    model.train()
+    it = iter(train_iter)
+    hidden = model.init_hidden(BATCH_SIZE)
+    for i, batch in enumerate(it):
+        data, target = batch.text, batch.target
+        hidden = repackage_hidden(hidden)
+        output, hidden = model(data, hidden)
+
+        loss = loss_fn(output.view(-1, VOCAB_SIZE),target.view(-1))
+        optimizer.zero_grad()
+        loss.backward()
+        torch.nn.utils.clip_grad_norm_(model.parameters(), GRAD_CLIP)
+        optimizer.step()
+
+        print(i,loss.item())
+        if i % 100 == 0:
+            print("loss ",loss.item())
