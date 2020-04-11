@@ -131,4 +131,47 @@ for epoch in range(N_EPOCHS):
     print("Epoch", epoch, "Train Loss", train_loss, "Train Acc", train_acc)
     print("Epoch", epoch, "Valid Loss", valid_loss, "Valid Acc", valid_acc)
 
+def train(model, iterator, optimizer, crit):
 
+    epoch_loss, epoch_acc = 0.,0.
+    model.train()
+    total_len = 0
+    for batch in iterator:
+        preds = model(batch.text).squeeze()
+        loss = crit(preds, batch.label)
+        acc = binary_accuracy(preds, batch.label)
+
+        optimizer.zero_grad()
+        loss.backward()
+        optimizer.step()
+
+        epoch_loss += loss.item() * len(batch.label)
+        epoch_acc += acc.item() * len(batch.label)
+        total_len += len(batch.label)
+
+    return epoch_loss / len(iterator), epoch_acc / total_len
+
+class RNNModel(nn.Module):
+    def __init__(self, vocab_size, embedding_size, output_size, pad_idx, hidden_size, dropout):
+        super(WordAVGModel, self).__init__()
+        self.embed = nn.Embedding(vocab_size, embedding_size, padding_idx=pad_idx)
+        self.lstm = nn.LSTM(embedding_size, hidden_size, bidirectional=True, num_layers=2)
+        self.linear = nn.Linear(embedding_size, output_size)
+        self.dropout = nn.Dropout(dropout)
+
+
+    def forward(self, text):
+        embedded = self.embed(text)  # [seq_len,  batch_size, embedding_size]
+        embedded = self.dropout(embedded)
+        output, (hiddden, cell ) = self.lstm(embedded)
+
+        hiddden = torch.cat([hiddden[-1], hiddden[-2]], dim=1)
+        hiddden = self.dropout(hiddden.squeeze())
+        return self.linear(hiddden)
+
+model1 =  RNNModel(vocab_size=VOCAB_SIZE,
+                   embedding_size=EMBEDDING_SIZE,
+                   output_size=OUTPUT_SIZE,
+                   pad_idx=PAD_IDX,
+                   hidden_size = 100,
+                   dropout=0.5)
