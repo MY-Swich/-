@@ -99,3 +99,4 @@ for epoch in range(num_epochs):
 
 torch.save(model.state_dict(), "mnist_cnn.pt")
 
+# todo test模块
