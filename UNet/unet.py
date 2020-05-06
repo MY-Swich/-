@@ -1,20 +1,20 @@
 import torch
 import torch.nn as nn
-
+#原文中没有填充,这里的填充是为了保证下采样和上采样在同一从中的可以cat在一起
 class DoubleConv(nn.Module):
     def __init__(self, in_ch, out_ch):
         super(DoubleConv, self).__init__()
         self.conv = nn.Sequential(
-            nn.Conv2d(in_ch, out_ch, 3, padding=1),   #原文中没有填充
-            nn.BatchNorm2d(out_ch), #归一化
+            nn.Conv2d(in_ch, out_ch, 3, padding=1),
+            nn.BatchNorm2d(out_ch),
             nn.ReLU(inplace=True),
             nn.Conv2d(out_ch, out_ch, 3, padding=1),
             nn.BatchNorm2d(out_ch),
             nn.ReLU(inplace=True)
         )
 
-    def forword(self, x):
-        return self.conv(x)
+    def forward(self, input):
+        return self.conv(input)
 
 class unet(nn.Module):
     def __init__(self, in_ch, out_ch):
@@ -49,7 +49,7 @@ class unet(nn.Module):
         p4 = self.pool4(c4)
         c5 = self.conv5(p4)
         up_6 = self.up6(c5)
-        merge6 = torch.cat([up_6, c4], dim=1) #copy todo 重点
+        merge6 = torch.cat([up_6, c4], dim=1) #copy todo 重点 已解决，通过padding保持维度一样
         c6 = self.conv6(merge6)
         up_7 = self.up7(c6)
         merge7 = torch.cat([up_7, c3], dim=1)
@@ -61,8 +61,6 @@ class unet(nn.Module):
         merge9 = torch.cat([up_9, c1], dim=1)
         c9 = self.conv9(merge9)
         c10 = self.conv10(c9)
-        out = nn.Sigmoid()(c10) #todo 了解
-        return out
+        # out = nn.Sigmoid()(c10) #激活函数
+        return c10
 
-model = unet(in_ch=1, out_ch=2)
-print(model)
