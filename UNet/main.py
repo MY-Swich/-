@@ -60,7 +60,7 @@ def train(batch_size):
 def Test(path):
     model = unet(3, 1)
     model.load_state_dict(torch.load(path, map_location='cpu'))
-    liver_dataset = LiverDataset("UNet/data/val", transform=x_transforms, target_transform=y_transforms)
+    liver_dataset = LiverDataset("data/val", transform=x_transforms, target_transform=y_transforms)
     dataloaders = DataLoader(liver_dataset, batch_size=1)
     model.eval()
     import matplotlib.pyplot as plt
@@ -69,11 +69,13 @@ def Test(path):
         for x, _ in dataloaders:
             y = model(x)
             img_y = torch.squeeze(y).numpy()
+            print((img_y))
             plt.imshow(img_y)
             plt.pause(0.01)
+        # plt.savefig("filename.png")
         plt.show()
 
 batch_size = 8
-ckpt = 'UNet/weights_19.pth' #weights_19.pth路径
+ckpt = 'weights_19.pth' #weights_19.pth路径
 train(batch_size)
-# test(ckpt)
+Test(ckpt)
